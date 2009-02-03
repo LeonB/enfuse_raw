@@ -1,0 +1,106 @@
+#!/usr/bin/env ruby
+
+#Test: ruby bin/enfuse_raw --enfuse=~/src/enfuse/enblend-enfuse-3.2/src/enfuse /home/leon/Photos/2009/02/01/dsc_0899.nef /home/leon/Photos/2009/02/01/dsc_0900.nef /home/leon/Photos/2009/02/01/dsc_0901.nef
+
+require File.expand_path(
+  File.join(File.dirname(__FILE__), %w[.. lib enfuse_raw]))
+
+# Put your code here
+require 'rubygems'
+require 'ruby-config'
+require 'fileutils'
+
+input_for_enfuse = Array.new
+config = RubyConfig.new
+config.add_source(UserChoices::CommandLineSource, :usage, 
+  "Usage: ruby #{$0} [options] input")
+
+#config.add_option(:input, :length => 1..10) { | command_line |
+config.add_option(:input) { | command_line |
+  command_line.uses_arglist
+}
+
+config.add_option(:output, :type => :string) { | command_line |
+  command_line.uses_option("-o", "--output FILE",
+    "Output file of enfuse")
+}
+
+config.add_option(:enfuse, :type => :string,
+  :default => `which enfuse`.chomp) { | command_line |
+  command_line.uses_option("--enfuse PATH",
+    "Which enfuse binary to use")
+}
+
+config.add_option(:ufraw, :type => :string,
+  :default => `which ufraw-batch`.chomp) { | command_line |
+  command_line.uses_option("--ufraw PATH",
+    "Which ufraw-batch binary to use")
+}
+
+config.add_option(:exposure_upper, :type => :integer,
+  :default => 3) { | command_line |
+  command_line.uses_option("-u", "--upper-exposure INT",
+    "Upper exposure")
+}
+
+config.add_option(:exposure_lower, :type => :integer,
+  :default => -3) { | command_line |
+  command_line.uses_option("-l", "--lower-exposure INT",
+    "Lower exposure")
+}
+
+config.add_option(:remove_temp, :type => :boolean,
+  :default => false) { | command_line |
+  command_line.uses_option("-t", "--remove-temp BOOL",
+    "Remove temporary files")
+}
+
+
+#upper limit of exposures
+config.build
+
+if config.input.length < 1
+  p 'You have to provide at least one input file!'
+  p 'Make this better!'
+  exit 1
+end
+
+#Check config.exposure_lower & config.exposure_upper
+
+if not config.output
+  p 'aaarghhh, no output file'
+  exit
+end
+
+config.input.each do |input|
+  basename = File.basename(input, File.extname(input))
+
+  (config.exposure_lower..config.exposure_upper).each do |exposure|
+    if exposure > 0
+      exposure_with_sign = "+#{exposure}"
+    elsif exposure < 0
+      exposure_with_sign = "#{exposure}"
+    else
+      exposure_with_sign = 0
+    end
+
+    output = "#{basename}_#{exposure_with_sign}.tiff"
+    input_for_enfuse << output
+
+    if File.exists?(output) && config.remove_temp == false
+      next
+    end
+    
+    `#{config.ufraw} --wb=camera --exposure=#{exposure} --out-type=tiff8  --output=#{output} "#{input}" --overwrite`
+  end
+end
+
+p 'Starting enfuse'
+`#{config.enfuse} -o #{config.output} #{input_for_enfuse.join(' ')}`
+
+if (config.remove_temp)
+  input_for_enfuse.each do |file|
+    File.delete(file)
+  end
+end
+# EOF
